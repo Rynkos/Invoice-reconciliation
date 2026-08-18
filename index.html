@@ -36,7 +36,7 @@
   .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--teal); margin:0 0 4px; font-weight:700;}
   h1{font-size:24px; margin:0 0 6px; color:var(--ink);}
   .sub{color:var(--ink-soft); margin:0 0 24px; font-size:13.5px;}
-
+ 
   .step{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:22px; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,0.02);}
   .drop-row{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
   @media(max-width:768px){.drop-row{grid-template-columns:1fr;}}
@@ -46,7 +46,7 @@
   .drop .hint{font-size:12px; color:var(--ink-soft); margin-bottom:8px;}
   .drop input[type=file]{font-size:13px; width:100%;}
   .file-status{font-family:var(--mono); font-size:12px; color:var(--teal-deep); margin-top:6px; font-weight:600;}
-
+ 
   .action-row{margin-top:18px; display:flex; align-items:center; gap:14px;}
   button.primary{
     background:var(--teal); color:#fff; border:none; border-radius:6px;
@@ -55,7 +55,7 @@
   }
   button.primary:disabled{background:#cbd5e1; cursor:not-allowed;}
   button.primary:hover:not(:disabled){background:var(--teal-deep);}
-
+ 
   .summary-grid{display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; margin:24px 0 20px;}
   @media(max-width:950px){.summary-grid{grid-template-columns:1fr 1fr;}}
   .stat{border-radius:8px; padding:14px 16px; border:1px solid var(--line); background:var(--card);}
@@ -71,7 +71,7 @@
   .stat.mismatch .num{color:var(--blue);}
   .stat.extra .num{color:var(--ink-soft);}
   .stat .label{font-size:12px; color:var(--ink); margin-top:2px; font-weight:500;}
-
+ 
   .card-result{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin-bottom:18px;}
   .table-scroll{max-height:360px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; margin-top:10px;}
   table{width:100%; border-collapse:collapse; font-size:12px;}
@@ -83,7 +83,7 @@
   tbody td{padding:7px 10px; border-bottom:1px solid #f1f5f9; color:var(--ink);}
   tbody tr:hover{background:#f8fafc;}
   .num-col{text-align:right; font-family:var(--mono);}
-
+ 
   .export-btn{
     background:#fff; border:1px solid var(--line); color:var(--ink);
     border-radius:5px; padding:5px 12px; font-size:12px; cursor:pointer;
@@ -100,7 +100,7 @@
   <p class="eyebrow">Tiện ích kế toán kiểm toán</p>
   <h1>Đối chiếu &amp; Kiểm soát Trùng lặp Hóa đơn</h1>
   <p class="sub">Tự động phát hiện <strong>Hóa đơn thiếu</strong>, <strong>Lệch ngày</strong>, <strong>Lệch tiền/thuế</strong> và <strong>Hạch toán trùng lặp</strong> theo Số HĐ &amp; Ngày HĐ.</p>
-
+ 
   <div class="step">
     <div class="drop-row">
       <div class="drop" id="drop-a">
@@ -116,16 +116,16 @@
         <div class="file-status" id="status-b"></div>
       </div>
     </div>
-
+ 
     <div class="action-row">
       <button class="primary" id="compare-btn" disabled>Bắt đầu đối chiếu ngay</button>
       <span id="hint-msg" style="font-size:13px; color:var(--ink-soft);">Vui lòng tải lên cả 2 file.</span>
     </div>
   </div>
-
+ 
   <div class="results" id="results" style="display:none;"></div>
 </div>
-
+ 
 <script>
 /* =====================================================================
    LUỒNG XỬ LÝ TỔNG QUÁT
@@ -138,9 +138,9 @@
       ra nhóm "lệch ngày" (khác với thiếu thật sự)
    6) Render kết quả
    ===================================================================== */
-
+ 
 let dataA = null, dataB = null;
-
+ 
 // ---------- BƯỚC 1: ĐỌC FILE ----------
 function readFile(file, cb){
   const reader = new FileReader();
@@ -154,7 +154,7 @@ function readFile(file, cb){
   reader.onerror = () => cb(new Error('Lỗi đọc file'));
   reader.readAsArrayBuffer(file);
 }
-
+ 
 function checkReady(){
   if(dataA && dataB){
     document.getElementById('compare-btn').disabled = false;
@@ -162,7 +162,7 @@ function checkReady(){
     document.getElementById('hint-msg').style.color = 'var(--teal)';
   }
 }
-
+ 
 document.getElementById('file-a').addEventListener('change', (e)=>{
   const f = e.target.files[0];
   if(!f) return;
@@ -174,7 +174,7 @@ document.getElementById('file-a').addEventListener('change', (e)=>{
     checkReady();
   });
 });
-
+ 
 document.getElementById('file-b').addEventListener('change', (e)=>{
   const f = e.target.files[0];
   if(!f) return;
@@ -186,9 +186,9 @@ document.getElementById('file-b').addEventListener('change', (e)=>{
     checkReady();
   });
 });
-
+ 
 // ---------- BƯỚC 2: CÁC HÀM CHUẨN HÓA ----------
-
+ 
 function findCol(row, candidates){
   const keys = Object.keys(row);
   for(const cand of candidates){
@@ -201,7 +201,7 @@ function findCol(row, candidates){
   }
   return null;
 }
-
+ 
 // Chuẩn hóa Số HĐ: chuyển về chuỗi, bỏ khoảng trắng thừa (kể cả khoảng trắng ẩn),
 // bỏ số 0 ở đầu để "0045" và "45" được coi là cùng 1 số hóa đơn.
 function normalizeInvoiceNo(v){
@@ -210,14 +210,14 @@ function normalizeInvoiceNo(v){
   s = s.replace(/^0+(?=\d)/, '');
   return s;
 }
-
+ 
 function parseAmount(v){
   if(v===undefined || v===null || v==='') return 0;
   if(typeof v === 'number') return v;
-
+ 
   let str = v.toString().trim().replace(/\s/g, '');
   let isNegative = false;
-
+ 
   if(str.startsWith('(') && str.endsWith(')')){
     isNegative = true;
     str = str.substring(1, str.length - 1);
@@ -225,26 +225,26 @@ function parseAmount(v){
     isNegative = true;
     str = str.substring(1);
   }
-
+ 
   if(str.includes(',') && str.includes('.')){
     if(str.lastIndexOf(',') > str.lastIndexOf('.')) str = str.replace(/\./g, '').replace(',', '.');
     else str = str.replace(/,/g, '');
   } else if(str.includes(',')){
     str = str.replace(',', '.');
   }
-
+ 
   let val = parseFloat(str);
   if(isNaN(val)) return 0;
   return isNegative ? -val : val;
 }
-
+ 
 // Chuẩn hóa Ngày HĐ: nhận vào giá trị thô của ô (có thể là số serial Excel hoặc chuỗi text
 // ở nhiều định dạng khác nhau), trả về { display: 'dd/mm/yyyy', key: 'yyyymmdd' }.
 // Luôn xuất ra CÙNG MỘT định dạng hiển thị + key cho mọi kiểu input hợp lệ, để 2 file
 // có nguồn dữ liệu khác nhau (số serial vs text, dd/mm vs yyyy-mm-dd...) vẫn khớp được nhau.
 function parseInvoiceDate(raw){
   if(raw === undefined || raw === null || raw === '') return {display:'', key:''};
-
+ 
   // Trường hợp Excel lưu ô ngày dưới dạng số serial (không format text)
   if(typeof raw === 'number' && raw > 20000 && raw < 60000){
     // Dùng mốc UTC xuyên suốt để tránh lệch ngày do múi giờ trình duyệt
@@ -252,13 +252,13 @@ function parseInvoiceDate(raw){
     const utc = new Date(ms);
     return finalizeDate(utc.getUTCDate(), utc.getUTCMonth() + 1, utc.getUTCFullYear());
   }
-
+ 
   const str = raw.toString().trim();
   const nums = str.match(/\d+/g);
   if(!nums || nums.length < 3){
     return {display: str, key: str.replace(/\D/g, '')};
   }
-
+ 
   let d, m, y;
   if(nums[0].length === 4){
     // yyyy-mm-dd / yyyy/mm/dd
@@ -272,15 +272,15 @@ function parseInvoiceDate(raw){
     y = parseInt(nums[2], 10);
     if(y < 100) y += 2000;
   }
-
+ 
   // Nếu tháng > 12 nhưng ngày hợp lệ làm tháng -> khả năng ngày/tháng bị đảo, tự sửa lại
   if(m > 12 && d <= 12){
     const tmp = d; d = m; m = tmp;
   }
-
+ 
   return finalizeDate(d, m, y, str);
 }
-
+ 
 function finalizeDate(d, m, y, fallbackStr){
   if(!d || !m || !y || m < 1 || m > 12 || d < 1 || d > 31){
     const raw = (fallbackStr || '');
@@ -290,7 +290,7 @@ function finalizeDate(d, m, y, fallbackStr){
   const mm = String(m).padStart(2, '0');
   return {display: `${dd}/${mm}/${y}`, key: `${y}${mm}${dd}`};
 }
-
+ 
 function buildRecords(rows, cols){
   return rows.map(row => {
     const dateInfo = parseInvoiceDate(cols.date ? row[cols.date] : '');
@@ -305,7 +305,7 @@ function buildRecords(rows, cols){
     };
   });
 }
-
+ 
 // ---------- BƯỚC 3: PHÁT HIỆN TRÙNG LẶP TRONG FILE A ----------
 // Quan trọng: gom nhóm CHỈ theo Số HĐ (không kèm Ngày). Nếu gom theo cả Số HĐ + Ngày,
 // một hóa đơn bị nhập trùng nhưng lệch cách biểu diễn Ngày (vd 1 dòng là số serial,
@@ -318,29 +318,29 @@ function findDuplicatesInA(listA){
     if(!bySoHd.has(item.soHd)) bySoHd.set(item.soHd, []);
     bySoHd.get(item.soHd).push(item);
   });
-
+ 
   const duplicates = [];
   const excludedKeys = new Set(); // các key Số HĐ|Ngày cần loại khỏi bước đối chiếu chéo bên dưới
-
+ 
   bySoHd.forEach((items, soHd) => {
     if(items.length <= 1) return;
-
+ 
     const byDate = new Map();
     items.forEach(it => {
       if(!byDate.has(it.dateKey)) byDate.set(it.dateKey, []);
       byDate.get(it.dateKey).push(it);
     });
-
+ 
     items.forEach(it => {
       const tag = byDate.get(it.dateKey).length > 1 ? 'Trùng hoàn toàn' : 'Trùng Số HĐ, khác Ngày';
       duplicates.push({...it, dupTag: tag});
       excludedKeys.add(`${it.soHd}|${it.dateKey}`);
     });
   });
-
+ 
   return {duplicates, excludedKeys};
 }
-
+ 
 // ---------- BƯỚC 4: ĐỐI CHIẾU CHÉO A vs B THEO KHÓA Số HĐ + Ngày ----------
 function buildKeyMap(list, excludeKeys){
   const map = new Map();
@@ -352,15 +352,15 @@ function buildKeyMap(list, excludeKeys){
   });
   return map;
 }
-
+ 
 function reconcile(listA, listB, excludedKeysA){
   const mapA = buildKeyMap(listA, excludedKeysA);
   const mapB = buildKeyMap(listB, null);
-
+ 
   const missingInA = [];   // có ở B, không có ở A
   const missingInB = [];   // có ở A, không có ở B
   const moneyMismatch = [];
-
+ 
   mapB.forEach((itemsB, k) => {
     if(!mapA.has(k)){
       missingInA.push(...itemsB);
@@ -371,7 +371,7 @@ function reconcile(listA, listB, excludedKeysA){
     const totalA = sum(itemsA, 'tongTien'), totalB = sum(itemsB, 'tongTien');
     const vatA = sum(itemsA, 'tienThue'), vatB = sum(itemsB, 'tienThue');
     const netA = sum(itemsA, 'tienTruocThue'), netB = sum(itemsB, 'tienTruocThue');
-
+ 
     if(Math.abs(totalA - totalB) > 10 || Math.abs(vatA - vatB) > 10 || Math.abs(netA - netB) > 10){
       moneyMismatch.push({
         soHd: itemsB[0].soHd, ngayHd: itemsB[0].ngayHd,
@@ -381,14 +381,14 @@ function reconcile(listA, listB, excludedKeysA){
       });
     }
   });
-
+ 
   mapA.forEach((itemsA, k) => {
     if(!mapB.has(k)) missingInB.push(...itemsA);
   });
-
+ 
   return {missingInA, missingInB, moneyMismatch};
 }
-
+ 
 // ---------- BƯỚC 5: TÁCH RIÊNG NHÓM "LỆCH NGÀY" TỪ 2 DANH SÁCH "THIẾU" ----------
 // Nếu cùng Số HĐ nhưng nằm ở cả missingInA (thiếu bên A) và missingInB (thiếu bên B),
 // nhiều khả năng đây LÀ CÙNG MỘT hóa đơn nhưng ghi nhận lệch Ngày, không phải thiếu thật.
@@ -398,10 +398,10 @@ function splitDateMismatch(missingInA, missingInB){
     if(!bySoHdB.has(item.soHd)) bySoHdB.set(item.soHd, []);
     bySoHdB.get(item.soHd).push(item);
   });
-
+ 
   const dateMismatch = [];
   const stillMissingInA = [];
-
+ 
   missingInA.forEach(itemA_side => { // itemA_side thực chất là bản ghi lấy từ B (thiếu bên A)
     const candidates = bySoHdB.get(itemA_side.soHd);
     if(candidates && candidates.length){
@@ -418,13 +418,13 @@ function splitDateMismatch(missingInA, missingInB){
       stillMissingInA.push(itemA_side);
     }
   });
-
+ 
   const stillMissingInB = [];
   bySoHdB.forEach(list => stillMissingInB.push(...list));
-
+ 
   return {dateMismatch, missingInA: stillMissingInA, missingInB: stillMissingInB};
 }
-
+ 
 // ---------- CHẠY TOÀN BỘ FLOW ----------
 document.getElementById('compare-btn').addEventListener('click', ()=>{
   const colA = {
@@ -443,23 +443,23 @@ document.getElementById('compare-btn').addEventListener('click', ()=>{
     vat: findCol(dataB[0], ['Tổng tiền thuế', 'Tiền thuế', 'Thuế VAT']),
     total: findCol(dataB[0], ['Tổng tiền thanh toán', 'Tổng thanh toán', 'Tổng tiền'])
   };
-
+ 
   const listA = buildRecords(dataA, colA);
   const listB = buildRecords(dataB, colB);
-
+ 
   const {duplicates, excludedKeys} = findDuplicatesInA(listA);
   const {missingInA, missingInB, moneyMismatch} = reconcile(listA, listB, excludedKeys);
   const {dateMismatch, missingInA: finalMissingInA, missingInB: finalMissingInB} = splitDateMismatch(missingInA, missingInB);
-
+ 
   renderResults(finalMissingInA, finalMissingInB, moneyMismatch, duplicates, dateMismatch);
 });
-
+ 
 // ---------- BƯỚC 6: RENDER ----------
 function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMismatch){
   const el = document.getElementById('results');
   el.style.display = 'block';
   const fmt = (n) => (n || 0).toLocaleString('vi-VN');
-
+ 
   const buildStandardTable = (list) => {
     if(!list.length) return '<p style="color:var(--ink-soft); font-style:italic; font-size:13px; padding:10px 0;">Không có hóa đơn nào.</p>';
     let html = '<div class="table-scroll"><table><thead><tr>';
@@ -478,7 +478,7 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMisma
     html += '</tbody></table></div>';
     return html;
   };
-
+ 
   const buildDupTable = (list) => {
     if(!list.length) return '<p style="color:var(--ink-soft); font-style:italic; font-size:13px; padding:10px 0;">Không có hóa đơn nào.</p>';
     let html = '<div class="table-scroll"><table><thead><tr>';
@@ -497,7 +497,7 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMisma
     html += '</tbody></table></div>';
     return html;
   };
-
+ 
   el.innerHTML = `
     <div class="summary-grid">
       <div class="stat missing">
@@ -521,7 +521,7 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMisma
         <div class="label">HĐ có ở AMIS, không có ở Thuế</div>
       </div>
     </div>
-
+ 
     ${duplicatesA.length > 0 ? `
     <div class="card-result" style="border-color:#ddd6fe; background:#faf5ff;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -534,7 +534,7 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMisma
       ${buildDupTable(duplicatesA)}
     </div>
     ` : ''}
-
+ 
     ${dateMismatch.length > 0 ? `
     <div class="card-result" style="border-color:#bfdbfe; background:#f5f9ff;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -565,7 +565,7 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMisma
       </div>
     </div>
     ` : ''}
-
+ 
     <div class="card-result">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
@@ -576,7 +576,7 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMisma
       </div>
       ${buildStandardTable(missingInA)}
     </div>
-
+ 
     ${diffMoney.length > 0 ? `
     <div class="card-result">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -605,7 +605,7 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMisma
       </div>
     </div>
     ` : ''}
-
+ 
     <div class="card-result">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
@@ -617,12 +617,12 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMisma
       ${buildStandardTable(missingInB)}
     </div>
   `;
-
+ 
   const mapExportData = (list) => list.map(item => ({
     "Số hóa đơn": item.soHd, "Ngày hóa đơn": item.ngayHd, "Tên nhà cung cấp": item.tenNcc,
     "Số tiền trước thuế": item.tienTruocThue, "Số tiền thuế VAT": item.tienThue, "Tổng tiền thanh toán": item.tongTien
   }));
-
+ 
   if(duplicatesA.length){
     const dupExport = duplicatesA.map(item => ({
       "Số hóa đơn": item.soHd, "Ngày hóa đơn": item.ngayHd, "Tên nhà cung cấp": item.tenNcc,
@@ -651,7 +651,7 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMisma
     document.getElementById('exp-extra').addEventListener('click', () => exportSheet(mapExportData(missingInB), 'Hoa_don_AMIS_khong_co_tren_thue.xlsx'));
   }
 }
-
+ 
 function exportSheet(data, filename){
   if(!data.length) return;
   const ws = XLSX.utils.json_to_sheet(data);
