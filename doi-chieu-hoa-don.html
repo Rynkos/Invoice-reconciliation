@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Đối chiếu & Kiểm tra Trùng lặp Hóa đơn</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#1e293b;
+    --ink-soft:#64748b;
+    --paper:#f8fafc;
+    --card:#ffffff;
+    --line:#e2e8f0;
+    --teal:#0d9488;
+    --teal-deep:#0f766e;
+    --amber:#d97706;
+    --amber-bg:#fffbeb;
+    --red:#dc2626;
+    --red-bg:#fef2f2;
+    --purple:#7c3aed;
+    --purple-bg:#f5f3ff;
+    --green-bg:#f0fdf4;
+    --mono: 'IBM Plex Mono', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:var(--sans); background:var(--paper); color:var(--ink);
+    padding:32px 20px 80px; line-height:1.5;
+  }
+  .wrap{max-width:1150px; margin:0 auto;}
+  .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--teal); margin:0 0 4px; font-weight:700;}
+  h1{font-size:24px; margin:0 0 6px; color:var(--ink);}
+  .sub{color:var(--ink-soft); margin:0 0 24px; font-size:13.5px;}
+
+  .step{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:22px; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,0.02);}
+  .drop-row{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  @media(max-width:768px){.drop-row{grid-template-columns:1fr;}}
+  .drop{border:1.5px dashed var(--line); border-radius:8px; padding:16px; background:#fafafa; transition:all .15s ease;}
+  .drop.has-file{border-color:var(--teal); background:var(--green-bg);}
+  .drop label{display:block; font-size:13px; font-weight:600; margin-bottom:4px;}
+  .drop .hint{font-size:12px; color:var(--ink-soft); margin-bottom:8px;}
+  .drop input[type=file]{font-size:13px; width:100%;}
+  .file-status{font-family:var(--mono); font-size:12px; color:var(--teal-deep); margin-top:6px; font-weight:600;}
+
+  .action-row{margin-top:18px; display:flex; align-items:center; gap:14px;}
+  button.primary{
+    background:var(--teal); color:#fff; border:none; border-radius:6px;
+    padding:11px 26px; font-size:14px; font-weight:600; cursor:pointer;
+    transition:background .15s ease;
+  }
+  button.primary:disabled{background:#cbd5e1; cursor:not-allowed;}
+  button.primary:hover:not(:disabled){background:var(--teal-deep);}
+
+  .summary-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin:24px 0 20px;}
+  @media(max-width:850px){.summary-grid{grid-template-columns:1fr 1fr;}}
+  .stat{border-radius:8px; padding:14px 16px; border:1px solid var(--line); background:var(--card);}
+  .stat.missing{background:var(--red-bg); border-color:#fecaca;}
+  .stat.diff{background:var(--amber-bg); border-color:#fde68a;}
+  .stat.dup{background:var(--purple-bg); border-color:#ddd6fe;}
+  .stat.extra{background:#f8fafc; border-color:#e2e8f0;}
+  .stat .num{font-family:var(--mono); font-size:22px; font-weight:700;}
+  .stat.missing .num{color:var(--red);}
+  .stat.diff .num{color:var(--amber);}
+  .stat.dup .num{color:var(--purple);}
+  .stat.extra .num{color:var(--ink-soft);}
+  .stat .label{font-size:12px; color:var(--ink); margin-top:2px; font-weight:500;}
+
+  .card-result{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin-bottom:18px;}
+  .table-scroll{max-height:360px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; margin-top:10px;}
+  table{width:100%; border-collapse:collapse; font-size:12px;}
+  thead th{
+    position:sticky; top:0; background:#f8fafc; text-align:left; font-family:var(--mono);
+    font-size:11px; text-transform:uppercase; color:var(--ink-soft);
+    padding:8px 10px; border-bottom:1px solid var(--line); z-index:2;
+  }
+  tbody td{padding:7px 10px; border-bottom:1px solid #f1f5f9; color:var(--ink);}
+  tbody tr:hover{background:#f8fafc;}
+  .num-col{text-align:right; font-family:var(--mono);}
+  
+  .export-btn{
+    background:#fff; border:1px solid var(--line); color:var(--ink);
+    border-radius:5px; padding:5px 12px; font-size:12px; cursor:pointer;
+    font-family:var(--mono); font-weight:600;
+  }
+  .export-btn:hover{background:var(--ink); color:#fff;}
+  .diff-tag{background:#fee2e2; color:#991b1b; padding:1px 5px; border-radius:3px; font-size:11px; font-family:var(--mono); font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Tiện ích kế toán kiểm toán</p>
+  <h1>Đối chiếu &amp; Kiểm soát Trùng lặp Hóa đơn</h1>
+  <p class="sub">Tự động phát hiện <strong>Hóa đơn thiếu</strong>, <strong>Lệch tiền/thuế (Hỗ trợ HĐ âm)</strong> và <strong>Hạch toán trùng lặp</strong> giữa AMIS và Tổng cục Thuế.</p>
+
+  <div class="step">
+    <div class="drop-row">
+      <div class="drop" id="drop-a">
+        <label>File A &mdash; Sổ sách / Phần mềm (AMIS)</label>
+        <div class="hint">Bảng kê chứng từ mua vào</div>
+        <input type="file" id="file-a" accept=".xlsx,.xls,.csv">
+        <div class="file-status" id="status-a"></div>
+      </div>
+      <div class="drop" id="drop-b">
+        <label>File B &mdash; Tổng cục Thuế (hoadondientu)</label>
+        <div class="hint">Bảng kê tra cứu từ TCT</div>
+        <input type="file" id="file-b" accept=".xlsx,.xls,.csv">
+        <div class="file-status" id="status-b"></div>
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button class="primary" id="compare-btn" disabled>Bắt đầu đối chiếu ngay</button>
+      <span id="hint-msg" style="font-size:13px; color:var(--ink-soft);">Vui lòng tải lên cả 2 file.</span>
+    </div>
+  </div>
+
+  <div class="results" id="results" style="display:none;"></div>
+</div>
+
+<script>
+let dataA = null, dataB = null;
+
+function readFile(file, cb){
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
+      cb(null, rows);
+    }catch(err){ cb(err); }
+  };
+  reader.onerror = () => cb(new Error('Lỗi đọc file'));
+  reader.readAsArrayBuffer(file);
+}
+
+function checkReady(){
+  if(dataA && dataB){
+    document.getElementById('compare-btn').disabled = false;
+    document.getElementById('hint-msg').textContent = '✓ Dữ liệu 2 bên đã sẵn sàng!';
+    document.getElementById('hint-msg').style.color = 'var(--teal)';
+  }
+}
+
+document.getElementById('file-a').addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  readFile(f, (err, rows)=>{
+    if(err || !rows.length) return;
+    dataA = rows;
+    document.getElementById('drop-a').classList.add('has-file');
+    document.getElementById('status-a').textContent = `✓ Đã nạp ${rows.length.toLocaleString('vi-VN')} dòng`;
+    checkReady();
+  });
+});
+
+document.getElementById('file-b').addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  readFile(f, (err, rows)=>{
+    if(err || !rows.length) return;
+    dataB = rows;
+    document.getElementById('drop-b').classList.add('has-file');
+    document.getElementById('status-b').textContent = `✓ Đã nạp ${rows.length.toLocaleString('vi-VN')} dòng`;
+    checkReady();
+  });
+});
+
+function findCol(row, candidates){
+  const keys = Object.keys(row);
+  for(const cand of candidates){
+    const cleanCand = cand.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
+    const found = keys.find(k => {
+      const cleanK = k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '');
+      return cleanK === cleanCand || cleanK.includes(cleanCand);
+    });
+    if(found) return found;
+  }
+  return null;
+}
+
+function normInvoiceNo(v){
+  if(v===undefined || v===null) return '';
+  const s = v.toString().trim().replace(/^0+/, '');
+  return s === '' ? '0' : s;
+}
+
+// Hàm tối ưu nhận diện số âm (Ví dụ: -1000000 hoặc (1000000))
+function parseAmount(v){
+  if(v===undefined || v===null || v==='') return 0;
+  if(typeof v === 'number') return v;
+  
+  let str = v.toString().trim().replace(/\s/g, '');
+  let isNegative = false;
+
+  // Phát hiện định dạng kế toán dấu ngoặc đơn (1.000) hoặc có dấu trừ đằng trước
+  if(str.startsWith('(') && str.endsWith(')')){
+    isNegative = true;
+    str = str.substring(1, str.length - 1);
+  } else if(str.startsWith('-')){
+    isNegative = true;
+    str = str.substring(1);
+  }
+
+  if(str.includes(',') && str.includes('.')){
+    if(str.lastIndexOf(',') > str.lastIndexOf('.')) str = str.replace(/\./g, '').replace(',', '.');
+    else str = str.replace(/,/g, '');
+  } else if(str.includes(',')){
+    str = str.replace(',', '.');
+  }
+  
+  let val = parseFloat(str);
+  if(isNaN(val)) return 0;
+  return isNegative ? -val : val;
+}
+
+function formatDate(v){
+  if(!v) return '';
+  if(typeof v === 'number' && v > 20000 && v < 60000){
+    const d = new Date((v - (25567 + 2)) * 86400 * 1000);
+    return `${('0'+d.getDate()).slice(-2)}/${('0'+(d.getMonth()+1)).slice(-2)}/${d.getFullYear()}`;
+  }
+  return v.toString().trim();
+}
+
+document.getElementById('compare-btn').addEventListener('click', ()=>{
+  const colA = {
+    invno: findCol(dataA[0], ['Số hóa đơn', 'Số HĐ', 'Số chứng từ']),
+    date: findCol(dataA[0], ['Ngày hóa đơn', 'Ngày HĐ', 'Ngày chứng từ']),
+    supplier: findCol(dataA[0], ['Nhà cung cấp', 'Tên nhà cung cấp', 'Tên người bán']),
+    net: findCol(dataA[0], ['Tổng tiền hàng', 'Tiền hàng', 'Tiền chưa thuế']),
+    vat: findCol(dataA[0], ['Tiền thuế GTGT', 'Tiền thuế', 'Thuế GTGT']),
+    total: findCol(dataA[0], ['Tổng tiền thanh toán', 'Tổng thanh toán', 'Tổng tiền'])
+  };
+
+  const colB = {
+    invno: findCol(dataB[0], ['Số hóa đơn', 'Số HĐ']),
+    date: findCol(dataB[0], ['Ngày lập', 'Ngày hóa đơn']),
+    supplier: findCol(dataB[0], ['Tên người bán/Tên người xuất hàng', 'Tên người bán', 'Tên nhà cung cấp']),
+    net: findCol(dataB[0], ['Tổng tiền chưa thuế', 'Tiền chưa thuế', 'Tiền hàng']),
+    vat: findCol(dataB[0], ['Tổng tiền thuế', 'Tiền thuế', 'Thuế VAT']),
+    total: findCol(dataB[0], ['Tổng tiền thanh toán', 'Tổng thanh toán', 'Tổng tiền'])
+  };
+
+  const mapRecord = (row, cols) => ({
+    soHd: normInvoiceNo(cols.invno ? row[cols.invno] : ''),
+    ngayHd: cols.date ? formatDate(row[cols.date]) : '',
+    tenNcc: cols.supplier ? (row[cols.supplier] || '').toString().trim() : '',
+    tienTruocThue: cols.net ? parseAmount(row[cols.net]) : 0,
+    tienThue: cols.vat ? parseAmount(row[cols.vat]) : 0,
+    tongTien: cols.total ? parseAmount(row[cols.total]) : 0
+  });
+
+  const listA = dataA.map(r => mapRecord(r, colA));
+  const listB = dataB.map(r => mapRecord(r, colB));
+
+  // 1. Kiểm tra và trích xuất trùng lặp nội bộ file AMIS
+  const groupA = new Map();
+  const duplicatesA = [];
+  const dupInvoiceKeys = new Set();
+
+  listA.forEach(item => {
+    const k = `${item.tenNcc.toLowerCase()}|${item.soHd}`;
+    if(!groupA.has(k)) groupA.set(k, []);
+    groupA.get(k).push(item);
+  });
+  
+  groupA.forEach((items, k) => {
+    if(items.length > 1) {
+      duplicatesA.push(...items);
+      const soHdToken = k.substring(k.indexOf('|') + 1);
+      dupInvoiceKeys.add(soHdToken); 
+    }
+  });
+
+  // 2. So khớp giữa 2 bên
+  const mapA = new Map(), mapB = new Map();
+  listA.forEach(item => {
+    if(!mapA.has(item.soHd)) mapA.set(item.soHd, []);
+    mapA.get(item.soHd).push(item);
+  });
+  listB.forEach(item => {
+    if(!mapB.has(item.soHd)) mapB.set(item.soHd, []);
+    mapB.get(item.soHd).push(item);
+  });
+
+  const missingInA = [];
+  const diffMoney = [];
+  const missingInB = [];
+
+  mapB.forEach((itemsB, k) => {
+    if(dupInvoiceKeys.has(k)) return; 
+
+    if(!mapA.has(k)){
+      missingInA.push(...itemsB);
+    } else {
+      const itemsA = mapA.get(k);
+      const sumTotalA = itemsA.reduce((s, x) => s + x.tongTien, 0);
+      const sumTotalB = itemsB.reduce((s, x) => s + x.tongTien, 0);
+      const sumVatA = itemsA.reduce((s, x) => s + x.tienThue, 0);
+      const sumVatB = itemsB.reduce((s, x) => s + x.tienThue, 0);
+      const sumNetA = itemsA.reduce((s, x) => s + x.tienTruocThue, 0);
+      const sumNetB = itemsB.reduce((s, x) => s + x.tienTruocThue, 0);
+
+      const diffTotal = Math.abs(sumTotalA - sumTotalB);
+      const diffVat = Math.abs(sumVatA - sumVatB);
+      const diffNet = Math.abs(sumNetA - sumNetB);
+
+      if(diffTotal > 10 || diffVat > 10 || diffNet > 10){
+        diffMoney.push({
+          soHd: k,
+          ngayHd: itemsB[0].ngayHd || itemsA[0].ngayHd,
+          tenNcc: itemsB[0].tenNcc || itemsA[0].tenNcc,
+          totalA: sumTotalA, totalB: sumTotalB, diffTotal: sumTotalA - sumTotalB,
+          vatA: sumVatA, vatB: sumVatB, diffVat: sumVatA - sumVatB,
+          netA: sumNetA, netB: sumNetB, diffNet: sumNetA - sumNetB
+        });
+      }
+    }
+  });
+
+  mapA.forEach((itemsA, k) => {
+    if(dupInvoiceKeys.has(k)) return; 
+    if(!mapB.has(k)) missingInB.push(...itemsA);
+  });
+
+  renderResults(missingInA, missingInB, diffMoney, duplicatesA);
+});
+
+function renderResults(missingInA, missingInB, diffMoney, duplicatesA){
+  const el = document.getElementById('results');
+  el.style.display = 'block';
+  const fmt = (n) => (n || 0).toLocaleString('vi-VN');
+
+  const buildStandardTable = (list) => {
+    if(!list.length) return '<p style="color:var(--ink-soft); font-style:italic; font-size:13px; padding:10px 0;">Không có hóa đơn nào.</p>';
+    let html = '<div class="table-scroll"><table><thead><tr>';
+    html += '<th>Số HĐ</th><th>Ngày HĐ</th><th>Tên NCC</th><th class="num-col">Tiền trước thuế</th><th class="num-col">Tiền thuế VAT</th><th class="num-col">Tổng tiền</th>';
+    html += '</tr></thead><tbody>';
+    list.slice(0, 300).forEach(r => {
+      html += `<tr>
+        <td><strong>${r.soHd}</strong></td>
+        <td>${r.ngayHd}</td>
+        <td>${r.tenNcc}</td>
+        <td class="num-col">${fmt(r.tienTruocThue)}</td>
+        <td class="num-col">${fmt(r.tienThue)}</td>
+        <td class="num-col"><strong>${fmt(r.tongTien)}</strong></td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    return html;
+  };
+
+  el.innerHTML = `
+    <div class="summary-grid">
+      <div class="stat missing">
+        <div class="num">${missingInA.length.toLocaleString('vi-VN')}</div>
+        <div class="label">HĐ thiếu trên AMIS</div>
+      </div>
+      <div class="stat dup">
+        <div class="num">${duplicatesA.length.toLocaleString('vi-VN')}</div>
+        <div class="label">Dòng HĐ trùng lặp trên AMIS</div>
+      </div>
+      <div class="stat diff">
+        <div class="num">${diffMoney.length.toLocaleString('vi-VN')}</div>
+        <div class="label">HĐ lệch Tiền / Thuế</div>
+      </div>
+      <div class="stat extra">
+        <div class="num">${missingInB.length.toLocaleString('vi-VN')}</div>
+        <div class="label">HĐ có ở AMIS, không có ở Thuế</div>
+      </div>
+    </div>
+
+    ${duplicatesA.length > 0 ? `
+    <div class="card-result" style="border-color:#ddd6fe; background:#faf5ff;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h3 style="margin:0 0 4px; font-size:15px; color:var(--purple);">⚠️ Cảnh báo: Hóa đơn bị nhập trùng trên AMIS (${duplicatesA.length} dòng)</h3>
+          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Các hóa đơn này bị nhập lặp lại nhiều lần trên phần mềm. Hãy xóa dòng thừa để số liệu khớp hoàn toàn.</p>
+        </div>
+        <button class="export-btn" id="exp-dup">📥 Tải Excel</button>
+      </div>
+      ${buildStandardTable(duplicatesA)}
+    </div>
+    ` : ''}
+
+    <div class="card-result">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h3 style="margin:0 0 4px; font-size:15px; color:var(--red);">1. Hóa đơn thiếu cần bổ sung (${missingInA.length})</h3>
+          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Hóa đơn đã lên hệ thống thuế nhưng phần mềm chưa hạch toán.</p>
+        </div>
+        ${missingInA.length ? '<button class="export-btn" id="exp-missing">📥 Tải Excel</button>' : ''}
+      </div>
+      ${buildStandardTable(missingInA)}
+    </div>
+
+    ${diffMoney.length > 0 ? `
+    <div class="card-result">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h3 style="margin:0 0 4px; font-size:15px; color:var(--amber);">2. Hóa đơn sai lệch tiền / tiền thuế (${diffMoney.length})</h3>
+          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Khớp số hóa đơn đơn lẻ nhưng chênh lệch số tiền hạch toán so với hóa đơn gốc.</p>
+        </div>
+        <button class="export-btn" id="exp-diff">📥 Tải Excel</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Số HĐ</th><th>Tên NCC</th><th class="num-col">Tổng tiền (AMIS)</th><th class="num-col">Tổng tiền (Thuế)</th><th class="num-col">Lệch tổng tiền</th><th class="num-col">Lệch VAT</th></tr>
+          </thead>
+          <tbody>
+            ${diffMoney.map(d => `
+              <tr>
+                <td><strong>${d.soHd}</strong></td><td>${d.tenNcc}</td>
+                <td class="num-col">${fmt(d.totalA)}</td><td class="num-col">${fmt(d.totalB)}</td>
+                <td class="num-col"><span class="diff-tag">${fmt(d.diffTotal)}</span></td>
+                <td class="num-col">${d.diffVat !== 0 ? `<span class="diff-tag">${fmt(d.diffVat)}</span>` : '0'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="card-result">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h3 style="margin:0 0 4px; font-size:15px; color:var(--ink);">3. Hóa đơn trên AMIS không thấy trên Thuế (${missingInB.length})</h3>
+          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Kiểm tra lại hóa đơn nhập tay, hóa đơn bị xóa/hủy hoặc sai số.</p>
+        </div>
+        ${missingInB.length ? '<button class="export-btn" id="exp-extra">📥 Tải Excel</button>' : ''}
+      </div>
+      ${buildStandardTable(missingInB)}
+    </div>
+  `;
+
+  const mapExportData = (list) => list.map(item => ({
+    "Số hóa đơn": item.soHd, "Ngày hóa đơn": item.ngayHd, "Tên nhà cung cấp": item.tenNcc,
+    "Số tiền trước thuế": item.tienTruocThue, "Số tiền thuế VAT": item.tienThue, "Tổng tiền thanh toán": item.tongTien
+  }));
+
+  if(duplicatesA.length){
+    document.getElementById('exp-dup').addEventListener('click', () => exportSheet(mapExportData(duplicatesA), 'Hoa_don_trung_lap_AMIS.xlsx'));
+  }
+  if(missingInA.length){
+    document.getElementById('exp-missing').addEventListener('click', () => exportSheet(mapExportData(missingInA), 'Hoa_don_thieu_can_hach_toan.xlsx'));
+  }
+  if(diffMoney.length){
+    const diffExport = diffMoney.map(d => ({
+      "Số hóa đơn": d.soHd, "Tên NCC": d.tenNcc, "Tổng tiền (AMIS)": d.totalA, "Tổng tiền (Thuế)": d.totalB, "Chênh lệch": d.diffTotal
+    }));
+    document.getElementById('exp-diff').addEventListener('click', () => exportSheet(diffExport, 'Hoa_don_lech_tien.xlsx'));
+  }
+  if(missingInB.length){
+    document.getElementById('exp-extra').addEventListener('click', () => exportSheet(mapExportData(missingInB), 'Hoa_don_AMIS_khong_co_tren_thue.xlsx'));
+  }
+}
+
+function exportSheet(data, filename){
+  if(!data.length) return;
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "KetQua");
+  XLSX.writeFile(wb, filename);
+}
+</script>
+</body>
+</html>
