@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Đối chiếu & Kiểm tra Trùng lặp Hóa đơn</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧾</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -20,6 +21,8 @@
     --red-bg:#fef2f2;
     --purple:#7c3aed;
     --purple-bg:#f5f3ff;
+    --blue:#2563eb;
+    --blue-bg:#eff6ff;
     --green-bg:#f0fdf4;
     --mono: 'IBM Plex Mono', Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -53,17 +56,19 @@
   button.primary:disabled{background:#cbd5e1; cursor:not-allowed;}
   button.primary:hover:not(:disabled){background:var(--teal-deep);}
 
-  .summary-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin:24px 0 20px;}
-  @media(max-width:850px){.summary-grid{grid-template-columns:1fr 1fr;}}
+  .summary-grid{display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; margin:24px 0 20px;}
+  @media(max-width:950px){.summary-grid{grid-template-columns:1fr 1fr;}}
   .stat{border-radius:8px; padding:14px 16px; border:1px solid var(--line); background:var(--card);}
   .stat.missing{background:var(--red-bg); border-color:#fecaca;}
   .stat.diff{background:var(--amber-bg); border-color:#fde68a;}
   .stat.dup{background:var(--purple-bg); border-color:#ddd6fe;}
+  .stat.mismatch{background:var(--blue-bg); border-color:#bfdbfe;}
   .stat.extra{background:#f8fafc; border-color:#e2e8f0;}
   .stat .num{font-family:var(--mono); font-size:22px; font-weight:700;}
   .stat.missing .num{color:var(--red);}
   .stat.diff .num{color:var(--amber);}
   .stat.dup .num{color:var(--purple);}
+  .stat.mismatch .num{color:var(--blue);}
   .stat.extra .num{color:var(--ink-soft);}
   .stat .label{font-size:12px; color:var(--ink); margin-top:2px; font-weight:500;}
 
@@ -73,12 +78,12 @@
   thead th{
     position:sticky; top:0; background:#f8fafc; text-align:left; font-family:var(--mono);
     font-size:11px; text-transform:uppercase; color:var(--ink-soft);
-    padding:8px 10px; border-bottom:1px solid var(--line); z-index:2;
+    padding:8px 10px; border-bottom:1.5px solid var(--line); z-index:2;
   }
   tbody td{padding:7px 10px; border-bottom:1px solid #f1f5f9; color:var(--ink);}
   tbody tr:hover{background:#f8fafc;}
   .num-col{text-align:right; font-family:var(--mono);}
-  
+
   .export-btn{
     background:#fff; border:1px solid var(--line); color:var(--ink);
     border-radius:5px; padding:5px 12px; font-size:12px; cursor:pointer;
@@ -86,13 +91,15 @@
   }
   .export-btn:hover{background:var(--ink); color:#fff;}
   .diff-tag{background:#fee2e2; color:#991b1b; padding:1px 5px; border-radius:3px; font-size:11px; font-family:var(--mono); font-weight:600;}
+  .date-tag{background:#dbeafe; color:#1e40af; padding:1px 5px; border-radius:3px; font-size:11px; font-family:var(--mono); font-weight:600;}
+  .full-tag{background:#ede9fe; color:#5b21b6; padding:1px 5px; border-radius:3px; font-size:11px; font-family:var(--mono); font-weight:600;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <p class="eyebrow">Tiện ích kế toán kiểm toán</p>
   <h1>Đối chiếu &amp; Kiểm soát Trùng lặp Hóa đơn</h1>
-  <p class="sub">Tự động phát hiện <strong>Hóa đơn thiếu</strong>, <strong>Lệch tiền/thuế (Hỗ trợ HĐ âm)</strong> và <strong>Hạch toán trùng lặp</strong> giữa AMIS và Tổng cục Thuế.</p>
+  <p class="sub">Tự động phát hiện <strong>Hóa đơn thiếu</strong>, <strong>Lệch ngày</strong>, <strong>Lệch tiền/thuế</strong> và <strong>Hạch toán trùng lặp</strong> theo Số HĐ &amp; Ngày HĐ.</p>
 
   <div class="step">
     <div class="drop-row">
@@ -120,8 +127,21 @@
 </div>
 
 <script>
+/* =====================================================================
+   LUỒNG XỬ LÝ TỔNG QUÁT
+   1) Đọc file Excel -> mảng object thô (rawRows)
+   2) Chuẩn hóa từng dòng thô -> record sạch {soHd, ngayHd, dateKey, ...}
+   3) Trên riêng file A: gom nhóm theo Số HĐ để tìm hóa đơn bị nhập trùng
+   4) Đối chiếu chéo A vs B theo khóa (Số HĐ + Ngày) để tìm: thiếu bên A,
+      thiếu bên B, lệch tiền
+   5) Với các hóa đơn "thiếu" ở bước 4, ghép lại theo riêng Số HĐ để tách
+      ra nhóm "lệch ngày" (khác với thiếu thật sự)
+   6) Render kết quả
+   ===================================================================== */
+
 let dataA = null, dataB = null;
 
+// ---------- BƯỚC 1: ĐỌC FILE ----------
 function readFile(file, cb){
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -167,6 +187,8 @@ document.getElementById('file-b').addEventListener('change', (e)=>{
   });
 });
 
+// ---------- BƯỚC 2: CÁC HÀM CHUẨN HÓA ----------
+
 function findCol(row, candidates){
   const keys = Object.keys(row);
   for(const cand of candidates){
@@ -180,21 +202,22 @@ function findCol(row, candidates){
   return null;
 }
 
-function normInvoiceNo(v){
-  if(v===undefined || v===null) return '';
-  const s = v.toString().trim().replace(/^0+/, '');
-  return s === '' ? '0' : s;
+// Chuẩn hóa Số HĐ: chuyển về chuỗi, bỏ khoảng trắng thừa (kể cả khoảng trắng ẩn),
+// bỏ số 0 ở đầu để "0045" và "45" được coi là cùng 1 số hóa đơn.
+function normalizeInvoiceNo(v){
+  if(v === undefined || v === null) return '';
+  let s = v.toString().replace(/[\s\u00A0]+/g, ' ').trim();
+  s = s.replace(/^0+(?=\d)/, '');
+  return s;
 }
 
-// Hàm tối ưu nhận diện số âm (Ví dụ: -1000000 hoặc (1000000))
 function parseAmount(v){
   if(v===undefined || v===null || v==='') return 0;
   if(typeof v === 'number') return v;
-  
+
   let str = v.toString().trim().replace(/\s/g, '');
   let isNegative = false;
 
-  // Phát hiện định dạng kế toán dấu ngoặc đơn (1.000) hoặc có dấu trừ đằng trước
   if(str.startsWith('(') && str.endsWith(')')){
     isNegative = true;
     str = str.substring(1, str.length - 1);
@@ -209,21 +232,200 @@ function parseAmount(v){
   } else if(str.includes(',')){
     str = str.replace(',', '.');
   }
-  
+
   let val = parseFloat(str);
   if(isNaN(val)) return 0;
   return isNegative ? -val : val;
 }
 
-function formatDate(v){
-  if(!v) return '';
-  if(typeof v === 'number' && v > 20000 && v < 60000){
-    const d = new Date((v - (25567 + 2)) * 86400 * 1000);
-    return `${('0'+d.getDate()).slice(-2)}/${('0'+(d.getMonth()+1)).slice(-2)}/${d.getFullYear()}`;
+// Chuẩn hóa Ngày HĐ: nhận vào giá trị thô của ô (có thể là số serial Excel hoặc chuỗi text
+// ở nhiều định dạng khác nhau), trả về { display: 'dd/mm/yyyy', key: 'yyyymmdd' }.
+// Luôn xuất ra CÙNG MỘT định dạng hiển thị + key cho mọi kiểu input hợp lệ, để 2 file
+// có nguồn dữ liệu khác nhau (số serial vs text, dd/mm vs yyyy-mm-dd...) vẫn khớp được nhau.
+function parseInvoiceDate(raw){
+  if(raw === undefined || raw === null || raw === '') return {display:'', key:''};
+
+  // Trường hợp Excel lưu ô ngày dưới dạng số serial (không format text)
+  if(typeof raw === 'number' && raw > 20000 && raw < 60000){
+    // Dùng mốc UTC xuyên suốt để tránh lệch ngày do múi giờ trình duyệt
+    const ms = Math.round((raw - 25569) * 86400 * 1000);
+    const utc = new Date(ms);
+    return finalizeDate(utc.getUTCDate(), utc.getUTCMonth() + 1, utc.getUTCFullYear());
   }
-  return v.toString().trim();
+
+  const str = raw.toString().trim();
+  const nums = str.match(/\d+/g);
+  if(!nums || nums.length < 3){
+    return {display: str, key: str.replace(/\D/g, '')};
+  }
+
+  let d, m, y;
+  if(nums[0].length === 4){
+    // yyyy-mm-dd / yyyy/mm/dd
+    y = parseInt(nums[0], 10);
+    m = parseInt(nums[1], 10);
+    d = parseInt(nums[2], 10);
+  } else {
+    // dd/mm/yyyy hoặc dd/mm/yy (định dạng phổ biến ở VN)
+    d = parseInt(nums[0], 10);
+    m = parseInt(nums[1], 10);
+    y = parseInt(nums[2], 10);
+    if(y < 100) y += 2000;
+  }
+
+  // Nếu tháng > 12 nhưng ngày hợp lệ làm tháng -> khả năng ngày/tháng bị đảo, tự sửa lại
+  if(m > 12 && d <= 12){
+    const tmp = d; d = m; m = tmp;
+  }
+
+  return finalizeDate(d, m, y, str);
 }
 
+function finalizeDate(d, m, y, fallbackStr){
+  if(!d || !m || !y || m < 1 || m > 12 || d < 1 || d > 31){
+    const raw = (fallbackStr || '');
+    return {display: raw, key: raw.replace(/\D/g, '')};
+  }
+  const dd = String(d).padStart(2, '0');
+  const mm = String(m).padStart(2, '0');
+  return {display: `${dd}/${mm}/${y}`, key: `${y}${mm}${dd}`};
+}
+
+function buildRecords(rows, cols){
+  return rows.map(row => {
+    const dateInfo = parseInvoiceDate(cols.date ? row[cols.date] : '');
+    return {
+      soHd: normalizeInvoiceNo(cols.invno ? row[cols.invno] : ''),
+      ngayHd: dateInfo.display,
+      dateKey: dateInfo.key,
+      tenNcc: cols.supplier ? (row[cols.supplier] || '').toString().trim() : '',
+      tienTruocThue: cols.net ? parseAmount(row[cols.net]) : 0,
+      tienThue: cols.vat ? parseAmount(row[cols.vat]) : 0,
+      tongTien: cols.total ? parseAmount(row[cols.total]) : 0
+    };
+  });
+}
+
+// ---------- BƯỚC 3: PHÁT HIỆN TRÙNG LẶP TRONG FILE A ----------
+// Quan trọng: gom nhóm CHỈ theo Số HĐ (không kèm Ngày). Nếu gom theo cả Số HĐ + Ngày,
+// một hóa đơn bị nhập trùng nhưng lệch cách biểu diễn Ngày (vd 1 dòng là số serial,
+// dòng kia bị dán thành text, hoặc lệch định dạng) sẽ bị lọt lưới vì 2 dateKey khác nhau.
+// Gom theo Số HĐ trước đảm bảo bắt được MỌI trường hợp trùng, sau đó mới phân loại theo Ngày.
+function findDuplicatesInA(listA){
+  const bySoHd = new Map();
+  listA.forEach(item => {
+    if(!item.soHd) return; // bỏ qua dòng không có Số HĐ (dòng trống/tổng cộng...)
+    if(!bySoHd.has(item.soHd)) bySoHd.set(item.soHd, []);
+    bySoHd.get(item.soHd).push(item);
+  });
+
+  const duplicates = [];
+  const excludedKeys = new Set(); // các key Số HĐ|Ngày cần loại khỏi bước đối chiếu chéo bên dưới
+
+  bySoHd.forEach((items, soHd) => {
+    if(items.length <= 1) return;
+
+    const byDate = new Map();
+    items.forEach(it => {
+      if(!byDate.has(it.dateKey)) byDate.set(it.dateKey, []);
+      byDate.get(it.dateKey).push(it);
+    });
+
+    items.forEach(it => {
+      const tag = byDate.get(it.dateKey).length > 1 ? 'Trùng hoàn toàn' : 'Trùng Số HĐ, khác Ngày';
+      duplicates.push({...it, dupTag: tag});
+      excludedKeys.add(`${it.soHd}|${it.dateKey}`);
+    });
+  });
+
+  return {duplicates, excludedKeys};
+}
+
+// ---------- BƯỚC 4: ĐỐI CHIẾU CHÉO A vs B THEO KHÓA Số HĐ + Ngày ----------
+function buildKeyMap(list, excludeKeys){
+  const map = new Map();
+  list.forEach(item => {
+    const k = `${item.soHd}|${item.dateKey}`;
+    if(excludeKeys && excludeKeys.has(k)) return;
+    if(!map.has(k)) map.set(k, []);
+    map.get(k).push(item);
+  });
+  return map;
+}
+
+function reconcile(listA, listB, excludedKeysA){
+  const mapA = buildKeyMap(listA, excludedKeysA);
+  const mapB = buildKeyMap(listB, null);
+
+  const missingInA = [];   // có ở B, không có ở A
+  const missingInB = [];   // có ở A, không có ở B
+  const moneyMismatch = [];
+
+  mapB.forEach((itemsB, k) => {
+    if(!mapA.has(k)){
+      missingInA.push(...itemsB);
+      return;
+    }
+    const itemsA = mapA.get(k);
+    const sum = (arr, field) => arr.reduce((s, x) => s + x[field], 0);
+    const totalA = sum(itemsA, 'tongTien'), totalB = sum(itemsB, 'tongTien');
+    const vatA = sum(itemsA, 'tienThue'), vatB = sum(itemsB, 'tienThue');
+    const netA = sum(itemsA, 'tienTruocThue'), netB = sum(itemsB, 'tienTruocThue');
+
+    if(Math.abs(totalA - totalB) > 10 || Math.abs(vatA - vatB) > 10 || Math.abs(netA - netB) > 10){
+      moneyMismatch.push({
+        soHd: itemsB[0].soHd, ngayHd: itemsB[0].ngayHd,
+        tenNcc: itemsB[0].tenNcc || itemsA[0].tenNcc,
+        totalA, totalB, diffTotal: totalA - totalB,
+        vatA, vatB, diffVat: vatA - vatB
+      });
+    }
+  });
+
+  mapA.forEach((itemsA, k) => {
+    if(!mapB.has(k)) missingInB.push(...itemsA);
+  });
+
+  return {missingInA, missingInB, moneyMismatch};
+}
+
+// ---------- BƯỚC 5: TÁCH RIÊNG NHÓM "LỆCH NGÀY" TỪ 2 DANH SÁCH "THIẾU" ----------
+// Nếu cùng Số HĐ nhưng nằm ở cả missingInA (thiếu bên A) và missingInB (thiếu bên B),
+// nhiều khả năng đây LÀ CÙNG MỘT hóa đơn nhưng ghi nhận lệch Ngày, không phải thiếu thật.
+function splitDateMismatch(missingInA, missingInB){
+  const bySoHdB = new Map();
+  missingInB.forEach(item => {
+    if(!bySoHdB.has(item.soHd)) bySoHdB.set(item.soHd, []);
+    bySoHdB.get(item.soHd).push(item);
+  });
+
+  const dateMismatch = [];
+  const stillMissingInA = [];
+
+  missingInA.forEach(itemA_side => { // itemA_side thực chất là bản ghi lấy từ B (thiếu bên A)
+    const candidates = bySoHdB.get(itemA_side.soHd);
+    if(candidates && candidates.length){
+      const matchedFromA = candidates.shift();
+      dateMismatch.push({
+        soHd: itemA_side.soHd,
+        ngayHd_AMIS: matchedFromA.ngayHd,
+        ngayHd_Thue: itemA_side.ngayHd,
+        tenNcc: itemA_side.tenNcc || matchedFromA.tenNcc,
+        tongTien_AMIS: matchedFromA.tongTien,
+        tongTien_Thue: itemA_side.tongTien
+      });
+    } else {
+      stillMissingInA.push(itemA_side);
+    }
+  });
+
+  const stillMissingInB = [];
+  bySoHdB.forEach(list => stillMissingInB.push(...list));
+
+  return {dateMismatch, missingInA: stillMissingInA, missingInB: stillMissingInB};
+}
+
+// ---------- CHẠY TOÀN BỘ FLOW ----------
 document.getElementById('compare-btn').addEventListener('click', ()=>{
   const colA = {
     invno: findCol(dataA[0], ['Số hóa đơn', 'Số HĐ', 'Số chứng từ']),
@@ -233,7 +435,6 @@ document.getElementById('compare-btn').addEventListener('click', ()=>{
     vat: findCol(dataA[0], ['Tiền thuế GTGT', 'Tiền thuế', 'Thuế GTGT']),
     total: findCol(dataA[0], ['Tổng tiền thanh toán', 'Tổng thanh toán', 'Tổng tiền'])
   };
-
   const colB = {
     invno: findCol(dataB[0], ['Số hóa đơn', 'Số HĐ']),
     date: findCol(dataB[0], ['Ngày lập', 'Ngày hóa đơn']),
@@ -243,92 +444,18 @@ document.getElementById('compare-btn').addEventListener('click', ()=>{
     total: findCol(dataB[0], ['Tổng tiền thanh toán', 'Tổng thanh toán', 'Tổng tiền'])
   };
 
-  const mapRecord = (row, cols) => ({
-    soHd: normInvoiceNo(cols.invno ? row[cols.invno] : ''),
-    ngayHd: cols.date ? formatDate(row[cols.date]) : '',
-    tenNcc: cols.supplier ? (row[cols.supplier] || '').toString().trim() : '',
-    tienTruocThue: cols.net ? parseAmount(row[cols.net]) : 0,
-    tienThue: cols.vat ? parseAmount(row[cols.vat]) : 0,
-    tongTien: cols.total ? parseAmount(row[cols.total]) : 0
-  });
+  const listA = buildRecords(dataA, colA);
+  const listB = buildRecords(dataB, colB);
 
-  const listA = dataA.map(r => mapRecord(r, colA));
-  const listB = dataB.map(r => mapRecord(r, colB));
+  const {duplicates, excludedKeys} = findDuplicatesInA(listA);
+  const {missingInA, missingInB, moneyMismatch} = reconcile(listA, listB, excludedKeys);
+  const {dateMismatch, missingInA: finalMissingInA, missingInB: finalMissingInB} = splitDateMismatch(missingInA, missingInB);
 
-  // 1. Kiểm tra và trích xuất trùng lặp nội bộ file AMIS
-  const groupA = new Map();
-  const duplicatesA = [];
-  const dupInvoiceKeys = new Set();
-
-  listA.forEach(item => {
-    const k = `${item.tenNcc.toLowerCase()}|${item.soHd}`;
-    if(!groupA.has(k)) groupA.set(k, []);
-    groupA.get(k).push(item);
-  });
-  
-  groupA.forEach((items, k) => {
-    if(items.length > 1) {
-      duplicatesA.push(...items);
-      const soHdToken = k.substring(k.indexOf('|') + 1);
-      dupInvoiceKeys.add(soHdToken); 
-    }
-  });
-
-  // 2. So khớp giữa 2 bên
-  const mapA = new Map(), mapB = new Map();
-  listA.forEach(item => {
-    if(!mapA.has(item.soHd)) mapA.set(item.soHd, []);
-    mapA.get(item.soHd).push(item);
-  });
-  listB.forEach(item => {
-    if(!mapB.has(item.soHd)) mapB.set(item.soHd, []);
-    mapB.get(item.soHd).push(item);
-  });
-
-  const missingInA = [];
-  const diffMoney = [];
-  const missingInB = [];
-
-  mapB.forEach((itemsB, k) => {
-    if(dupInvoiceKeys.has(k)) return; 
-
-    if(!mapA.has(k)){
-      missingInA.push(...itemsB);
-    } else {
-      const itemsA = mapA.get(k);
-      const sumTotalA = itemsA.reduce((s, x) => s + x.tongTien, 0);
-      const sumTotalB = itemsB.reduce((s, x) => s + x.tongTien, 0);
-      const sumVatA = itemsA.reduce((s, x) => s + x.tienThue, 0);
-      const sumVatB = itemsB.reduce((s, x) => s + x.tienThue, 0);
-      const sumNetA = itemsA.reduce((s, x) => s + x.tienTruocThue, 0);
-      const sumNetB = itemsB.reduce((s, x) => s + x.tienTruocThue, 0);
-
-      const diffTotal = Math.abs(sumTotalA - sumTotalB);
-      const diffVat = Math.abs(sumVatA - sumVatB);
-      const diffNet = Math.abs(sumNetA - sumNetB);
-
-      if(diffTotal > 10 || diffVat > 10 || diffNet > 10){
-        diffMoney.push({
-          soHd: k,
-          ngayHd: itemsB[0].ngayHd || itemsA[0].ngayHd,
-          tenNcc: itemsB[0].tenNcc || itemsA[0].tenNcc,
-          totalA: sumTotalA, totalB: sumTotalB, diffTotal: sumTotalA - sumTotalB,
-          vatA: sumVatA, vatB: sumVatB, diffVat: sumVatA - sumVatB,
-          netA: sumNetA, netB: sumNetB, diffNet: sumNetA - sumNetB
-        });
-      }
-    }
-  });
-
-  mapA.forEach((itemsA, k) => {
-    if(dupInvoiceKeys.has(k)) return; 
-    if(!mapB.has(k)) missingInB.push(...itemsA);
-  });
-
-  renderResults(missingInA, missingInB, diffMoney, duplicatesA);
+  renderResults(finalMissingInA, finalMissingInB, moneyMismatch, duplicates, dateMismatch);
 });
 
-function renderResults(missingInA, missingInB, diffMoney, duplicatesA){
+// ---------- BƯỚC 6: RENDER ----------
+function renderResults(missingInA, missingInB, diffMoney, duplicatesA, dateMismatch){
   const el = document.getElementById('results');
   el.style.display = 'block';
   const fmt = (n) => (n || 0).toLocaleString('vi-VN');
@@ -352,11 +479,34 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA){
     return html;
   };
 
+  const buildDupTable = (list) => {
+    if(!list.length) return '<p style="color:var(--ink-soft); font-style:italic; font-size:13px; padding:10px 0;">Không có hóa đơn nào.</p>';
+    let html = '<div class="table-scroll"><table><thead><tr>';
+    html += '<th>Số HĐ</th><th>Ngày HĐ</th><th>Tên NCC</th><th class="num-col">Tổng tiền</th><th>Ghi chú</th>';
+    html += '</tr></thead><tbody>';
+    list.slice(0, 300).forEach(r => {
+      const isFull = r.dupTag === 'Trùng hoàn toàn';
+      html += `<tr>
+        <td><strong>${r.soHd}</strong></td>
+        <td>${r.ngayHd}</td>
+        <td>${r.tenNcc}</td>
+        <td class="num-col"><strong>${fmt(r.tongTien)}</strong></td>
+        <td><span class="${isFull ? 'full-tag' : 'date-tag'}">${r.dupTag}</span></td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    return html;
+  };
+
   el.innerHTML = `
     <div class="summary-grid">
       <div class="stat missing">
         <div class="num">${missingInA.length.toLocaleString('vi-VN')}</div>
         <div class="label">HĐ thiếu trên AMIS</div>
+      </div>
+      <div class="stat mismatch">
+        <div class="num">${dateMismatch.length.toLocaleString('vi-VN')}</div>
+        <div class="label">HĐ lệch Ngày HĐ</div>
       </div>
       <div class="stat dup">
         <div class="num">${duplicatesA.length.toLocaleString('vi-VN')}</div>
@@ -376,12 +526,43 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA){
     <div class="card-result" style="border-color:#ddd6fe; background:#faf5ff;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <h3 style="margin:0 0 4px; font-size:15px; color:var(--purple);">⚠️ Cảnh báo: Hóa đơn bị nhập trùng trên AMIS (${duplicatesA.length} dòng)</h3>
-          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Các hóa đơn này bị nhập lặp lại nhiều lần trên phần mềm. Hãy xóa dòng thừa để số liệu khớp hoàn toàn.</p>
+          <h3 style="margin:0 0 4px; font-size:15px; color:var(--purple);">⚠️ Cảnh báo: Số HĐ bị nhập trùng trên AMIS (${duplicatesA.length} dòng)</h3>
+          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Cùng Số HĐ xuất hiện nhiều hơn 1 lần. <strong>Trùng hoàn toàn</strong> = cùng cả Ngày HĐ, nên xóa bớt dòng thừa. <strong>Trùng Số HĐ, khác Ngày</strong> = cần kiểm tra kỹ.</p>
         </div>
         <button class="export-btn" id="exp-dup">📥 Tải Excel</button>
       </div>
-      ${buildStandardTable(duplicatesA)}
+      ${buildDupTable(duplicatesA)}
+    </div>
+    ` : ''}
+
+    ${dateMismatch.length > 0 ? `
+    <div class="card-result" style="border-color:#bfdbfe; background:#f5f9ff;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h3 style="margin:0 0 4px; font-size:15px; color:var(--blue);">🗓️ Hóa đơn trùng Số HĐ nhưng LỆCH NGÀY (${dateMismatch.length})</h3>
+          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Có trên cả 2 bên, cùng Số HĐ, nhưng Ngày HĐ ghi nhận khác nhau — nên kiểm tra & sửa lại ngày trên AMIS thay vì hạch toán thêm.</p>
+        </div>
+        <button class="export-btn" id="exp-mismatch">📥 Tải Excel</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Số HĐ</th><th>Ngày HĐ (AMIS)</th><th>Ngày HĐ (Thuế)</th><th>Tên NCC</th><th class="num-col">Tổng tiền (AMIS)</th><th class="num-col">Tổng tiền (Thuế)</th></tr>
+          </thead>
+          <tbody>
+            ${dateMismatch.map(d => `
+              <tr>
+                <td><strong>${d.soHd}</strong></td>
+                <td><span class="date-tag">${d.ngayHd_AMIS}</span></td>
+                <td><span class="date-tag">${d.ngayHd_Thue}</span></td>
+                <td>${d.tenNcc}</td>
+                <td class="num-col">${fmt(d.tongTien_AMIS)}</td>
+                <td class="num-col">${fmt(d.tongTien_Thue)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
     ` : ''}
 
@@ -389,7 +570,7 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA){
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
           <h3 style="margin:0 0 4px; font-size:15px; color:var(--red);">1. Hóa đơn thiếu cần bổ sung (${missingInA.length})</h3>
-          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Hóa đơn đã lên hệ thống thuế nhưng phần mềm chưa hạch toán.</p>
+          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Hóa đơn có trên hệ thống thuế nhưng không tìm thấy Số HĐ tương ứng bên AMIS.</p>
         </div>
         ${missingInA.length ? '<button class="export-btn" id="exp-missing">📥 Tải Excel</button>' : ''}
       </div>
@@ -401,19 +582,19 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA){
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
           <h3 style="margin:0 0 4px; font-size:15px; color:var(--amber);">2. Hóa đơn sai lệch tiền / tiền thuế (${diffMoney.length})</h3>
-          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Khớp số hóa đơn đơn lẻ nhưng chênh lệch số tiền hạch toán so với hóa đơn gốc.</p>
+          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Khớp cả Số HĐ và Ngày HĐ nhưng chênh lệch số tiền hạch toán so với hóa đơn gốc.</p>
         </div>
         <button class="export-btn" id="exp-diff">📥 Tải Excel</button>
       </div>
       <div class="table-scroll">
         <table>
           <thead>
-            <tr><th>Số HĐ</th><th>Tên NCC</th><th class="num-col">Tổng tiền (AMIS)</th><th class="num-col">Tổng tiền (Thuế)</th><th class="num-col">Lệch tổng tiền</th><th class="num-col">Lệch VAT</th></tr>
+            <tr><th>Số HĐ</th><th>Ngày HĐ</th><th>Tên NCC</th><th class="num-col">Tổng tiền (AMIS)</th><th class="num-col">Tổng tiền (Thuế)</th><th class="num-col">Lệch tổng tiền</th><th class="num-col">Lệch VAT</th></tr>
           </thead>
           <tbody>
             ${diffMoney.map(d => `
               <tr>
-                <td><strong>${d.soHd}</strong></td><td>${d.tenNcc}</td>
+                <td><strong>${d.soHd}</strong></td><td>${d.ngayHd}</td><td>${d.tenNcc}</td>
                 <td class="num-col">${fmt(d.totalA)}</td><td class="num-col">${fmt(d.totalB)}</td>
                 <td class="num-col"><span class="diff-tag">${fmt(d.diffTotal)}</span></td>
                 <td class="num-col">${d.diffVat !== 0 ? `<span class="diff-tag">${fmt(d.diffVat)}</span>` : '0'}</td>
@@ -429,7 +610,7 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA){
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
           <h3 style="margin:0 0 4px; font-size:15px; color:var(--ink);">3. Hóa đơn trên AMIS không thấy trên Thuế (${missingInB.length})</h3>
-          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Kiểm tra lại hóa đơn nhập tay, hóa đơn bị xóa/hủy hoặc sai số.</p>
+          <p style="margin:0; font-size:12.5px; color:var(--ink-soft);">Số hóa đơn này trên phần mềm không tìm thấy Số HĐ tương ứng trên hệ thống Thuế.</p>
         </div>
         ${missingInB.length ? '<button class="export-btn" id="exp-extra">📥 Tải Excel</button>' : ''}
       </div>
@@ -443,14 +624,26 @@ function renderResults(missingInA, missingInB, diffMoney, duplicatesA){
   }));
 
   if(duplicatesA.length){
-    document.getElementById('exp-dup').addEventListener('click', () => exportSheet(mapExportData(duplicatesA), 'Hoa_don_trung_lap_AMIS.xlsx'));
+    const dupExport = duplicatesA.map(item => ({
+      "Số hóa đơn": item.soHd, "Ngày hóa đơn": item.ngayHd, "Tên nhà cung cấp": item.tenNcc,
+      "Số tiền trước thuế": item.tienTruocThue, "Số tiền thuế VAT": item.tienThue, "Tổng tiền thanh toán": item.tongTien,
+      "Ghi chú": item.dupTag
+    }));
+    document.getElementById('exp-dup').addEventListener('click', () => exportSheet(dupExport, 'Hoa_don_trung_lap_AMIS.xlsx'));
+  }
+  if(dateMismatch.length){
+    const mmExport = dateMismatch.map(d => ({
+      "Số hóa đơn": d.soHd, "Ngày HĐ (AMIS)": d.ngayHd_AMIS, "Ngày HĐ (Thuế)": d.ngayHd_Thue,
+      "Tên NCC": d.tenNcc, "Tổng tiền (AMIS)": d.tongTien_AMIS, "Tổng tiền (Thuế)": d.tongTien_Thue
+    }));
+    document.getElementById('exp-mismatch').addEventListener('click', () => exportSheet(mmExport, 'Hoa_don_lech_ngay.xlsx'));
   }
   if(missingInA.length){
     document.getElementById('exp-missing').addEventListener('click', () => exportSheet(mapExportData(missingInA), 'Hoa_don_thieu_can_hach_toan.xlsx'));
   }
   if(diffMoney.length){
     const diffExport = diffMoney.map(d => ({
-      "Số hóa đơn": d.soHd, "Tên NCC": d.tenNcc, "Tổng tiền (AMIS)": d.totalA, "Tổng tiền (Thuế)": d.totalB, "Chênh lệch": d.diffTotal
+      "Số hóa đơn": d.soHd, "Ngày hóa đơn": d.ngayHd, "Tên NCC": d.tenNcc, "Tổng tiền (AMIS)": d.totalA, "Tổng tiền (Thuế)": d.totalB, "Chênh lệch": d.diffTotal
     }));
     document.getElementById('exp-diff').addEventListener('click', () => exportSheet(diffExport, 'Hoa_don_lech_tien.xlsx'));
   }
